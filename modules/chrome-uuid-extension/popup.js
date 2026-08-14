@@ -40,7 +40,8 @@ const regexInput = document.getElementById("regexInput");
 const regexError = document.getElementById("regexError");
 const fabVisibleToggle = document.getElementById("fabVisibleToggle");
 const themeSelect = document.getElementById("themeSelect");
-const currentUuidEl = document.getElementById("currentUuid");
+const uuidSelect = document.getElementById("uuidSelect");
+const uuidCount = document.getElementById("uuidCount");
 const copyBtn = document.getElementById("copyBtn");
 const copyLabel = document.getElementById("copyLabel");
 const urlHintEl = document.getElementById("urlHint");
@@ -52,6 +53,7 @@ const statusEl = document.getElementById("status");
 const themeMq = window.matchMedia("(prefers-color-scheme: light)");
 
 let currentTab = null;
+let currentUuids = [];
 let currentUuid = null;
 let currentFormatId = "dashed";
 let customRegexSource = "";
@@ -115,24 +117,27 @@ function buildCustomFormat() {
   };
 }
 
-function extractUuid(url) {
+// 提取 URL 中所有匹配的 UUID，按展示值去重，返回 [{ value, raws }]
+function extractUuids(url) {
   const format = getFormat();
   if (!format.pattern) {
-    return null;
+    return [];
   }
-  const match = url.match(format.pattern);
-  return match ? format.format(match[0]) : null;
-}
-
-function replaceUuid(url, newUuid) {
-  const format = getFormat();
-  if (!format.pattern || !format.global) {
-    return null;
+  const re = new RegExp(format.pattern.source, "gi");
+  const map = new Map();
+  let m;
+  while ((m = re.exec(url)) !== null) {
+    if (m[0].length === 0) {
+      re.lastIndex += 1;
+      continue;
+    }
+    const value = format.format(m[0]);
+    if (!map.has(value)) {
+      map.set(value, []);
+    }
+    map.get(value).push(m[0]);
   }
-  if (!url.match(format.pattern)) {
-    return null;
-  }
-  return url.replace(format.global, format.format(newUuid));
+  return Array.from(map.entries()).map(([value, raws]) => ({ value, raws }));
 }
 
 // ---------- 主题 ----------
@@ -266,9 +271,16 @@ async function loadCurrentTab() {
   currentTab = tab;
 
   if (!tab?.url || tab.url.startsWith("chrome://") || tab.url.startsWith("chrome-extension://")) {
+    currentUuids = [];
     currentUuid = null;
-    currentUuidEl.textContent = "无法读取此页面";
-    currentUuidEl.classList.add("empty");
+    uuidCount.textContent = "0";
+    uuidSelect.innerHTML = "";
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "无法读取此页面";
+    uuidSelect.appendChild(opt);
+    uuidSelect.disabled = true;
+    uuidSelect.title = "";
     urlHintEl.textContent = "请在普通网页中使用此插件";
     copyBtn.disabled = true;
     applyBtn.disabled = true;
@@ -284,18 +296,34 @@ function refreshFromUrl() {
   if (!currentTab?.url) {
     return;
   }
-  currentUuid = extractUuid(currentTab.url);
+  currentUuids = extractUuids(currentTab.url);
+  uuidCount.textContent = String(currentUuids.length);
 
-  if (currentUuid) {
-    currentUuidEl.textContent = currentUuid;
-    currentUuidEl.classList.remove("empty");
-    currentUuidEl.title = currentUuid;
-    copyBtn.disabled = false;
-  } else {
-    currentUuidEl.textContent = "未找到 UUID";
-    currentUuidEl.classList.add("empty");
-    currentUuidEl.title = "";
+  uuidSelect.innerHTML = "";
+  if (currentUuids.length === 0) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "未找到 UUID";
+    uuidSelect.appendChild(opt);
+    uuidSelect.disabled = true;
+    uuidSelect.title = "";
+    currentUuid = null;
     copyBtn.disabled = true;
+  } else {
+    currentUuids.forEach((item) => {
+      const opt = document.createElement("option");
+      opt.value = item.value;
+      opt.textContent = item.value;
+      uuidSelect.appendChild(opt);
+    });
+    uuidSelect.disabled = false;
+    currentUuid = currentUuids[0].value;
+    uuidSelect.value = currentUuid;
+    uuidSelect.title =
+      currentUuids.length > 1
+        ? "检测到多个 UUID，请选择要复制 / 替换的一个"
+        : currentUuid;
+    copyBtn.disabled = false;
   }
 
   applyFormatToUi();
@@ -329,9 +357,23 @@ async function applyUuid() {
   if (!currentTab?.id || !currentUuid || !format.isValid(newUuid)) {
     return;
   }
+  if (newUuid === currentUuid) {
+    setStatus("新 UUID 与当前相同", "error");
+    return;
+  }
 
-  const newUrl = replaceUuid(currentTab.url, newUuid);
-  if (!newUrl) {
+  const entry = currentUuids.find((e) => e.value === currentUuid);
+  if (!entry) {
+    setStatus("无法替换 URL 中的 UUID", "error");
+    return;
+  }
+
+  // 仅替换所选 UUID 对应的原文，其余 UUID 保持不变
+  let newUrl = currentTab.url;
+  for (const raw of entry.raws) {
+    newUrl = newUrl.split(raw).join(newUuid);
+  }
+  if (newUrl === currentTab.url) {
     setStatus("无法替换 URL 中的 UUID", "error");
     return;
   }
@@ -365,6 +407,12 @@ regexInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !applyBtn.disabled) {
     applyUuid();
   }
+});
+
+uuidSelect.addEventListener("change", () => {
+  currentUuid = uuidSelect.value || null;
+  copyBtn.disabled = !currentUuid;
+  applyFormatToUi();
 });
 
 fabVisibleToggle.addEventListener("change", async () => {

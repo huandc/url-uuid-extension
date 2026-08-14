@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         URL UUID 工具（油猴脚本）
 // @namespace    https://github.com/huandc/url-uuid-extension
-// @version      1.2.0
+// @version      1.3.0
 // @description  从当前页面 URL 中提取 UUID：悬浮按钮一键复制（可拖动、位置记忆），支持格式切换与替换后刷新
 // @author       huandC
 // @match        http://*/*
@@ -78,7 +78,9 @@
   let mini = null;
   let panel = null;
   let panelEls = null;
+  let currentUuids = [];
   let currentUuid = null;
+  let fabUuid = null;
   let currentFormatId = "dashed";
   let customRegexSource = "";
   let fabVisible = true;
@@ -157,15 +159,35 @@
     return match ? format.format(match[0]) : null;
   }
 
-  function replaceUuid(url, newUuid) {
+  // 提取 URL 中所有匹配的 UUID，按展示值去重，返回 [{ value, raws }]
+  function extractUuids(url) {
     const format = getFormat();
-    if (!format.pattern || !format.global) {
-      return null;
+    if (!format.pattern) {
+      return [];
     }
-    if (!url.match(format.pattern)) {
-      return null;
+    const re = new RegExp(format.pattern.source, "gi");
+    const map = new Map();
+    let m;
+    while ((m = re.exec(url)) !== null) {
+      if (m[0].length === 0) {
+        re.lastIndex += 1;
+        continue;
+      }
+      const value = format.format(m[0]);
+      if (!map.has(value)) {
+        map.set(value, []);
+      }
+      map.get(value).push(m[0]);
     }
-    return url.replace(format.global, format.format(newUuid));
+    return Array.from(map.entries()).map(([value, raws]) => ({ value, raws }));
+  }
+
+  function replaceSelected(raws, newUuid) {
+    let result = location.href;
+    for (const raw of raws) {
+      result = result.split(raw).join(newUuid);
+    }
+    return result;
   }
 
   // ---------- 主题 ----------
@@ -292,7 +314,7 @@
       fab.classList.remove("copied");
       copyBtn.innerHTML = `${COPY_ICON}<span>复制 UUID</span>`;
     }
-    fab.title = currentUuid ? `${currentUuid}（可拖动）` : "可拖动";
+    fab.title = fabUuid ? `${fabUuid}（可拖动）` : "可拖动";
   }
 
   function showCopiedState() {
@@ -304,7 +326,7 @@
       clearTimeout(resetTimer);
     }
     resetTimer = setTimeout(() => {
-      if (!fab || !currentUuid) {
+      if (!fab || !fabUuid) {
         return;
       }
       renderFabContent(false);
@@ -364,8 +386,8 @@
     const gearBtn = fab.querySelector(".uuid-fab-gear");
     if (gearBtn && gearBtn.contains(pressTarget)) {
       togglePanel();
-    } else if (currentUuid) {
-      copyText(currentUuid).then((ok) => {
+    } else if (fabUuid) {
+      copyText(fabUuid).then((ok) => {
         if (ok) {
           showCopiedState();
         }
@@ -403,7 +425,7 @@
 
   function createFab(uuid) {
     removeFab();
-    currentUuid = uuid;
+    fabUuid = uuid;
 
     fab = document.createElement("div");
     fab.id = "uuid-userscript-fab";
@@ -425,7 +447,7 @@
     endDrag(false);
     fab?.remove();
     fab = null;
-    currentUuid = null;
+    fabUuid = null;
   }
 
   // 悬浮按钮隐藏时的小齿轮入口，保证设置面板仍可打开
@@ -465,7 +487,7 @@
       removeFab();
       return;
     }
-    if (fab && currentUuid === uuid) {
+    if (fab && fabUuid === uuid) {
       applyFabPosition();
       return;
     }
@@ -545,13 +567,34 @@
     panelEls.regexError.textContent =
       showRegex && hasRegex && !regexValid ? "正则表达式无效" : "";
 
-    if (currentUuid) {
-      panelEls.code.textContent = currentUuid;
-      panelEls.code.title = currentUuid;
+    // 当前 UUID 下拉
+    currentUuids = extractUuids(location.href);
+    panelEls.count.textContent = String(currentUuids.length);
+    panelEls.uuidSelect.innerHTML = "";
+    if (currentUuids.length === 0) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "未找到 UUID";
+      panelEls.uuidSelect.appendChild(opt);
+      panelEls.uuidSelect.disabled = true;
+      panelEls.uuidSelect.title = "";
+      currentUuid = null;
     } else {
-      panelEls.code.textContent = "未找到 UUID";
-      panelEls.code.title = "";
+      currentUuids.forEach((item) => {
+        const opt = document.createElement("option");
+        opt.value = item.value;
+        opt.textContent = item.value;
+        panelEls.uuidSelect.appendChild(opt);
+      });
+      panelEls.uuidSelect.disabled = false;
+      currentUuid = currentUuids[0].value;
+      panelEls.uuidSelect.value = currentUuid;
+      panelEls.uuidSelect.title =
+        currentUuids.length > 1
+          ? "检测到多个 UUID，请选择要复制 / 替换的一个"
+          : currentUuid;
     }
+
     updateInputState();
   }
 
@@ -564,8 +607,18 @@
     if (!currentUuid || !format.isValid(newUuid)) {
       return;
     }
-    const newUrl = replaceUuid(location.href, newUuid);
-    if (!newUrl) {
+    if (newUuid === currentUuid) {
+      setPanelStatus("新 UUID 与当前相同", false);
+      return;
+    }
+    const entry = currentUuids.find((e) => e.value === currentUuid);
+    if (!entry) {
+      setPanelStatus("无法替换 URL 中的 UUID", false);
+      return;
+    }
+    // 仅替换所选 UUID 对应的原文，其余 UUID 保持不变
+    const newUrl = replaceSelected(entry.raws, newUuid);
+    if (newUrl === location.href) {
       setPanelStatus("无法替换 URL 中的 UUID", false);
       return;
     }
@@ -630,9 +683,9 @@
           </div>
         </details>
 
-        <label>当前 UUID</label>
+        <label>当前 UUID（<span class="uuid-panel-count">0</span> 个）</label>
         <div class="uuid-panel-current">
-          <code class="uuid-panel-code" title="">—</code>
+          <select class="uuid-panel-select uuid-panel-uuid-select" title=""></select>
           <button class="uuid-panel-copy" type="button">复制</button>
         </div>
 
@@ -654,7 +707,8 @@
       regexRow: panel.querySelector(".uuid-panel-regex-row"),
       regex: panel.querySelector(".uuid-panel-regex"),
       regexError: panel.querySelector(".uuid-panel-regex-error"),
-      code: panel.querySelector(".uuid-panel-code"),
+      uuidSelect: panel.querySelector(".uuid-panel-uuid-select"),
+      count: panel.querySelector(".uuid-panel-count"),
       copy: panel.querySelector(".uuid-panel-copy"),
       input: panel.querySelector(".uuid-panel-input"),
       error: panel.querySelector(".uuid-panel-error"),
@@ -709,6 +763,10 @@
       }
       syncFab();
       setPanelStatus(fabVisible ? "已开启悬浮按钮" : "已隐藏悬浮按钮", true);
+    });
+    panelEls.uuidSelect.addEventListener("change", () => {
+      currentUuid = panelEls.uuidSelect.value || null;
+      updateInputState();
     });
     panelEls.copy.addEventListener("click", async () => {
       if (!currentUuid) {
@@ -960,18 +1018,17 @@
       align-items: center;
       gap: 8px;
     }
-    #uuid-userscript-panel .uuid-panel-code {
+    #uuid-userscript-panel .uuid-panel-uuid-select {
       flex: 1;
       min-width: 0;
-      padding: 8px 10px;
-      background: #0f1117;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 8px;
+      padding: 8px 30px 8px 10px;
       font-family: "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
       font-size: 11.5px;
-      color: #818cf8;
-      word-break: break-all;
-      line-height: 1.4;
+    }
+    #uuid-userscript-panel .uuid-panel-uuid-select:disabled {
+      color: #a1a1aa;
+      font-style: italic;
+      opacity: 0.7;
     }
     #uuid-userscript-panel .uuid-panel-copy {
       flex-shrink: 0;
@@ -1124,8 +1181,7 @@
       color: #1f2328;
     }
     html.us-theme-light #uuid-userscript-panel select,
-    html.us-theme-light #uuid-userscript-panel input,
-    html.us-theme-light #uuid-userscript-panel .uuid-panel-code {
+    html.us-theme-light #uuid-userscript-panel input {
       background: #f6f8fa;
       border-color: rgba(0, 0, 0, 0.12);
       color: #1f2328;
@@ -1133,8 +1189,8 @@
     html.us-theme-light #uuid-userscript-panel input::placeholder {
       color: #9ca3af;
     }
-    html.us-theme-light #uuid-userscript-panel .uuid-panel-code {
-      color: #4f46e5;
+    html.us-theme-light #uuid-userscript-panel .uuid-panel-uuid-select:disabled {
+      color: #656d76;
     }
     html.us-theme-light #uuid-userscript-panel .uuid-panel-copy {
       background: #eaeef2;
