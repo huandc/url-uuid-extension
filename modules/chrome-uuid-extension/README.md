@@ -35,3 +35,7 @@ modules/chrome-uuid-extension/
 ├── content.css     # 悬浮按钮样式
 └── README.md
 ```
+
+## 油猴脚本
+
+不想安装 Chrome 插件？仓库还提供了同功能的油猴脚本（Tampermonkey），见根目录 [`userscript/url-uuid.user.js`](../../userscript/url-uuid.user.js)。
