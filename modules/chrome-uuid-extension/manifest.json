@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "URL UUID 插件",
+  "version": "1.0.0",
+  "description": "从当前页面 URL 中提取 UUID，支持一键复制与替换后刷新。",
+  "permissions": ["storage"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "URL UUID 插件"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

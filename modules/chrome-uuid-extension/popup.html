@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>URL UUID</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup">
+    <header>
+      <h1>URL UUID</h1>
+      <p class="page-url" id="pageUrl">—</p>
+    </header>
+
+    <section class="field">
+      <label for="formatSelect">UUID 格式</label>
+      <select id="formatSelect">
+        <option value="dashed">UUID（带 -）</option>
+        <option value="plain">UUID（不带 -）</option>
+      </select>
+    </section>
+
+    <section class="field toggle">
+      <label for="showFloating">显示悬浮按钮</label>
+      <input type="checkbox" id="showFloating">
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <span>当前 URL 中的 UUID</span>
+        <button id="copyBtn" class="btn small">复制</button>
+      </div>
+      <div id="uuidDisplay" class="uuid-display empty">未检测到 UUID</div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><span>替换 UUID</span></div>
+      <input id="newUuidInput" type="text" placeholder="输入新的 UUID" spellcheck="false">
+      <button id="replaceBtn" class="btn primary">确定并刷新</button>
+    </section>
+
+    <footer><span id="status"></span></footer>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
