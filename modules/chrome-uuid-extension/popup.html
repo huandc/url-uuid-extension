@@ -22,45 +22,58 @@
     </header>
 
     <section class="card">
-      <label class="label" for="formatSelect">UUID 格式</label>
-      <select id="formatSelect" class="select">
-        <option value="dashed">UUID（带 -）</option>
-        <option value="compact">UUID（不带 -）</option>
-        <option value="custom">自定义格式（正则）</option>
-      </select>
-      <div id="regexRow" class="regex-row hidden">
-        <label class="label" for="regexInput">正则表达式</label>
-        <input
-          id="regexInput"
-          class="input"
-          type="text"
-          placeholder="例如：[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
-          spellcheck="false"
-          autocomplete="off"
-        />
-        <p id="regexError" class="error hidden"></p>
-      </div>
-      <div class="switch-row">
-        <div>
-          <div class="switch-title">显示悬浮按钮</div>
-          <div class="switch-desc">页面含 UUID 时右下角可拖动复制</div>
+      <details class="settings">
+        <summary class="settings-summary">
+          <div>
+            <div class="switch-title">设置</div>
+            <div class="switch-desc">UUID 格式 / 界面主题 / 悬浮按钮</div>
+          </div>
+          <span class="settings-chevron" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </span>
+        </summary>
+        <div class="settings-body">
+          <label class="label" for="formatSelect">UUID 格式</label>
+          <select id="formatSelect" class="select">
+            <option value="dashed">UUID（带 -）</option>
+            <option value="compact">UUID（不带 -）</option>
+            <option value="custom">自定义格式（正则）</option>
+          </select>
+          <div id="regexRow" class="regex-row hidden">
+            <label class="label" for="regexInput">正则表达式</label>
+            <input
+              id="regexInput"
+              class="input"
+              type="text"
+              placeholder="例如：[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              spellcheck="false"
+              autocomplete="off"
+            />
+            <p id="regexError" class="error hidden"></p>
+          </div>
+          <div class="switch-row">
+            <div>
+              <div class="switch-title">显示悬浮按钮</div>
+              <div class="switch-desc">页面含 UUID 时右下角可拖动复制</div>
+            </div>
+            <label class="switch" for="fabVisibleToggle">
+              <input id="fabVisibleToggle" type="checkbox" checked />
+              <span class="switch-track" aria-hidden="true"></span>
+            </label>
+          </div>
+          <div class="theme-row">
+            <div>
+              <div class="switch-title">界面主题</div>
+              <div class="switch-desc">白色 / 黑色 / 跟随系统</div>
+            </div>
+            <select id="themeSelect" class="select theme-select">
+              <option value="system">跟随系统</option>
+              <option value="light">白色</option>
+              <option value="dark">黑色</option>
+            </select>
+          </div>
         </div>
-        <label class="switch" for="fabVisibleToggle">
-          <input id="fabVisibleToggle" type="checkbox" checked />
-          <span class="switch-track" aria-hidden="true"></span>
-        </label>
-      </div>
-      <div class="theme-row">
-        <div>
-          <div class="switch-title">界面主题</div>
-          <div class="switch-desc">白色 / 黑色 / 跟随系统</div>
-        </div>
-        <select id="themeSelect" class="select theme-select">
-          <option value="system">跟随系统</option>
-          <option value="light">白色</option>
-          <option value="dark">黑色</option>
-        </select>
-      </div>
+      </details>
     </section>
 
     <section class="card">

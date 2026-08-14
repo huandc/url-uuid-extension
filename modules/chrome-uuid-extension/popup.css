@@ -373,3 +373,41 @@ body {
   --placeholder: #9ca3af;
   --shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
 }
+
+/* 设置折叠区 */
+.settings-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+
+.settings-summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-chevron {
+  display: inline-flex;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+
+.settings-chevron svg {
+  width: 14px;
+  height: 14px;
+}
+
+.settings[open] .settings-chevron {
+  transform: rotate(180deg);
+}
+
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}

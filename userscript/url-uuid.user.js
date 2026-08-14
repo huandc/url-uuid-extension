@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         URL UUID 工具（油猴脚本）
 // @namespace    https://github.com/huandc/url-uuid-extension
-// @version      1.1.0
+// @version      1.2.0
 // @description  从当前页面 URL 中提取 UUID：悬浮按钮一键复制（可拖动、位置记忆），支持格式切换与替换后刷新
 // @author       huandC
 // @match        http://*/*
@@ -20,6 +20,7 @@
 
   const FORMAT_KEY = "uuidFormat";
   const UUID_REGEX_KEY = "uuidRegex";
+  const FAB_VISIBLE_KEY = "fabVisible";
   const FAB_POSITION_KEY = "fabPosition";
   const THEME_KEY = "theme";
   const DRAG_THRESHOLD = 5;
@@ -74,11 +75,13 @@
 </svg>`;
 
   let fab = null;
+  let mini = null;
   let panel = null;
   let panelEls = null;
   let currentUuid = null;
   let currentFormatId = "dashed";
   let customRegexSource = "";
+  let fabVisible = true;
   let theme = "system";
   let fabPosition = null;
   let resetTimer = null;
@@ -186,7 +189,10 @@
     const format = GM_getValue(FORMAT_KEY, "dashed");
     currentFormatId = format === "custom" || FORMATS[format] ? format : "dashed";
     customRegexSource = GM_getValue(UUID_REGEX_KEY, "") || "";
-    theme = GM_getValue(THEME_KEY, "system") === "light" || GM_getValue(THEME_KEY, "system") === "dark" ? GM_getValue(THEME_KEY, "system") : "system";
+    fabVisible = GM_getValue(FAB_VISIBLE_KEY, true) !== false;
+    const savedTheme = GM_getValue(THEME_KEY, "system");
+    theme =
+      savedTheme === "light" || savedTheme === "dark" ? savedTheme : "system";
     fabPosition = normalizePosition(GM_getValue(FAB_POSITION_KEY, null));
   }
 
@@ -422,7 +428,38 @@
     currentUuid = null;
   }
 
+  // 悬浮按钮隐藏时的小齿轮入口，保证设置面板仍可打开
+  function showMiniTrigger() {
+    if (mini) {
+      return;
+    }
+    mini = document.createElement("button");
+    mini.id = "uuid-userscript-mini";
+    mini.type = "button";
+    mini.title = "打开 URL UUID 工具";
+    mini.innerHTML = GEAR_ICON;
+    document.documentElement.appendChild(mini);
+    if (fabPosition) {
+      mini.style.left = `${fabPosition.left}px`;
+      mini.style.top = `${fabPosition.top}px`;
+      mini.style.right = "auto";
+      mini.style.bottom = "auto";
+    }
+    mini.addEventListener("click", togglePanel);
+  }
+
+  function hideMiniTrigger() {
+    mini?.remove();
+    mini = null;
+  }
+
   function syncFab() {
+    if (!fabVisible) {
+      removeFab();
+      showMiniTrigger();
+      return;
+    }
+    hideMiniTrigger();
     const uuid = extractUuid(location.href);
     if (!uuid) {
       removeFab();
@@ -485,6 +522,7 @@
     }
     panelEls.select.value = currentFormatId;
     panelEls.theme.value = theme;
+    panelEls.fab.checked = fabVisible;
     const format = getFormat();
     panelEls.input.placeholder = currentUuid || format.placeholder;
 
@@ -556,28 +594,41 @@
         <button class="uuid-panel-close" type="button" title="关闭">${CLOSE_ICON}</button>
       </div>
       <div class="uuid-panel-body">
-        <label for="uuid-panel-select">UUID 格式</label>
-        <select id="uuid-panel-select" class="uuid-panel-select">
-          <option value="dashed">UUID（带 -）</option>
-          <option value="compact">UUID（不带 -）</option>
-          <option value="custom">自定义格式（正则）</option>
-        </select>
-        <div class="uuid-panel-regex-row hidden">
-          <label for="uuid-panel-regex">正则表达式</label>
-          <input id="uuid-panel-regex" class="uuid-panel-regex" type="text"
-            placeholder="例如：[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
-            spellcheck="false" autocomplete="off" />
-          <p class="uuid-panel-regex-error hidden"></p>
-        </div>
+        <details class="uuid-panel-settings">
+          <summary class="uuid-panel-settings-summary">
+            <span>设置</span>
+            <svg class="uuid-panel-settings-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="uuid-panel-settings-body">
+            <label for="uuid-panel-select">UUID 格式</label>
+            <select id="uuid-panel-select" class="uuid-panel-select">
+              <option value="dashed">UUID（带 -）</option>
+              <option value="compact">UUID（不带 -）</option>
+              <option value="custom">自定义格式（正则）</option>
+            </select>
+            <div class="uuid-panel-regex-row hidden">
+              <label for="uuid-panel-regex">正则表达式</label>
+              <input id="uuid-panel-regex" class="uuid-panel-regex" type="text"
+                placeholder="例如：[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                spellcheck="false" autocomplete="off" />
+              <p class="uuid-panel-regex-error hidden"></p>
+            </div>
 
-        <div class="uuid-panel-theme-row">
-          <label for="uuid-panel-theme">界面主题</label>
-          <select id="uuid-panel-theme" class="uuid-panel-select">
-            <option value="system">跟随系统</option>
-            <option value="light">白色</option>
-            <option value="dark">黑色</option>
-          </select>
-        </div>
+            <div class="uuid-panel-theme-row">
+              <label for="uuid-panel-theme">界面主题</label>
+              <select id="uuid-panel-theme" class="uuid-panel-select">
+                <option value="system">跟随系统</option>
+                <option value="light">白色</option>
+                <option value="dark">黑色</option>
+              </select>
+            </div>
+
+            <div class="uuid-panel-fab-row">
+              <label for="uuid-panel-fab">显示悬浮按钮</label>
+              <input id="uuid-panel-fab" type="checkbox" checked />
+            </div>
+          </div>
+        </details>
 
         <label>当前 UUID</label>
         <div class="uuid-panel-current">
@@ -599,6 +650,7 @@
     panelEls = {
       select: panel.querySelector(".uuid-panel-select"),
       theme: panel.querySelector("#uuid-panel-theme"),
+      fab: panel.querySelector("#uuid-panel-fab"),
       regexRow: panel.querySelector(".uuid-panel-regex-row"),
       regex: panel.querySelector(".uuid-panel-regex"),
       regexError: panel.querySelector(".uuid-panel-regex-error"),
@@ -647,6 +699,16 @@
         // ignore
       }
       applyTheme();
+    });
+    panelEls.fab.addEventListener("change", () => {
+      fabVisible = panelEls.fab.checked;
+      try {
+        GM_setValue(FAB_VISIBLE_KEY, fabVisible);
+      } catch (e) {
+        // ignore
+      }
+      syncFab();
+      setPanelStatus(fabVisible ? "已开启悬浮按钮" : "已隐藏悬浮按钮", true);
     });
     panelEls.copy.addEventListener("click", async () => {
       if (!currentUuid) {
@@ -774,6 +836,32 @@
       height: 16px;
       flex-shrink: 0;
       pointer-events: none;
+    }
+
+    #uuid-userscript-mini {
+      position: fixed;
+      right: 20px;
+      bottom: 24px;
+      z-index: 2147483647;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      background: linear-gradient(135deg, #6366f1, #7c3aed);
+      color: #fff;
+      box-shadow: 0 8px 24px rgba(99, 102, 241, 0.45);
+      cursor: pointer;
+      transition: filter 0.15s ease;
+    }
+    #uuid-userscript-mini:hover {
+      filter: brightness(1.08);
+    }
+    #uuid-userscript-mini svg {
+      width: 18px;
+      height: 18px;
     }
 
     #uuid-userscript-panel {
@@ -962,6 +1050,57 @@
       display: none;
     }
 
+    /* ---- 设置折叠区 ---- */
+    #uuid-userscript-panel .uuid-panel-settings-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+    }
+    #uuid-userscript-panel .uuid-panel-settings-summary::-webkit-details-marker {
+      display: none;
+    }
+    #uuid-userscript-panel .uuid-panel-settings-summary span {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #a1a1aa;
+    }
+    #uuid-userscript-panel .uuid-panel-settings-chevron {
+      width: 14px;
+      height: 14px;
+      color: #a1a1aa;
+      transition: transform 0.15s ease;
+    }
+    #uuid-userscript-panel .uuid-panel-settings[open] .uuid-panel-settings-chevron {
+      transform: rotate(180deg);
+    }
+    #uuid-userscript-panel .uuid-panel-settings-body {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-top: 8px;
+      margin-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    #uuid-userscript-panel .uuid-panel-theme-row,
+    #uuid-userscript-panel .uuid-panel-fab-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    #uuid-userscript-panel .uuid-panel-theme-row select {
+      width: auto;
+    }
+    #uuid-userscript-panel .uuid-panel-fab-row input {
+      width: auto;
+      accent-color: #6366f1;
+    }
+
     /* ---- 浅色（白色）主题 ---- */
     html.us-theme-light #uuid-userscript-panel {
       background: #ffffff;
@@ -969,12 +1108,15 @@
       color: #1f2328;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
     }
-    html.us-theme-light #uuid-userscript-panel .uuid-panel-head {
+    html.us-theme-light #uuid-userscript-panel .uuid-panel-head,
+    html.us-theme-light #uuid-userscript-panel .uuid-panel-settings-body {
       border-bottom-color: rgba(0, 0, 0, 0.12);
     }
     html.us-theme-light #uuid-userscript-panel label,
     html.us-theme-light #uuid-userscript-panel .uuid-panel-status,
-    html.us-theme-light #uuid-userscript-panel .uuid-panel-close {
+    html.us-theme-light #uuid-userscript-panel .uuid-panel-close,
+    html.us-theme-light #uuid-userscript-panel .uuid-panel-settings-summary span,
+    html.us-theme-light #uuid-userscript-panel .uuid-panel-settings-chevron {
       color: #656d76;
     }
     html.us-theme-light #uuid-userscript-panel .uuid-panel-close:hover {
