@@ -3,6 +3,7 @@
   --surface: #1a1d27;
   --surface-hover: #222633;
   --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
   --text: #f4f4f5;
   --text-muted: #a1a1aa;
   --accent: #818cf8;
@@ -10,6 +11,7 @@
   --accent-glow: rgba(99, 102, 241, 0.35);
   --success: #34d399;
   --error: #f87171;
+  --placeholder: #52525b;
   --radius: 12px;
   --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -164,7 +166,7 @@ body {
 }
 
 .input::placeholder {
-  color: #52525b;
+  color: var(--placeholder);
 }
 
 .input.invalid {
@@ -274,8 +276,8 @@ body {
 }
 
 .btn-ghost:hover:not(:disabled) {
-  background: #2a2f3d;
-  border-color: rgba(255, 255, 255, 0.14);
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
 }
 
 .btn-ghost.copied {
@@ -338,4 +340,36 @@ body {
 
 .regex-row .input {
   font-family: "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+}
+
+.theme-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.theme-select {
+  width: auto;
+  padding: 6px 28px 6px 10px;
+  background-position: right 10px center;
+}
+
+/* 浅色（白色）主题 */
+:root[data-theme="light"] {
+  --bg: #f6f8fa;
+  --surface: #ffffff;
+  --surface-hover: #eaeef2;
+  --border: rgba(0, 0, 0, 0.12);
+  --border-strong: rgba(0, 0, 0, 0.2);
+  --text: #1f2328;
+  --text-muted: #656d76;
+  --accent: #4f46e5;
+  --accent-strong: #6366f1;
+  --accent-glow: rgba(99, 102, 241, 0.2);
+  --success: #16a34a;
+  --error: #dc2626;
+  --placeholder: #9ca3af;
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
 }

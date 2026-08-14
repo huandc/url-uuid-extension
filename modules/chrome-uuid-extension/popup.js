@@ -1,6 +1,7 @@
 const FORMAT_KEY = "uuidFormat";
 const UUID_REGEX_KEY = "uuidRegex";
 const FAB_VISIBLE_KEY = "fabVisible";
+const THEME_KEY = "theme";
 
 const FORMATS = {
   dashed: {
@@ -38,6 +39,7 @@ const regexRow = document.getElementById("regexRow");
 const regexInput = document.getElementById("regexInput");
 const regexError = document.getElementById("regexError");
 const fabVisibleToggle = document.getElementById("fabVisibleToggle");
+const themeSelect = document.getElementById("themeSelect");
 const currentUuidEl = document.getElementById("currentUuid");
 const copyBtn = document.getElementById("copyBtn");
 const copyLabel = document.getElementById("copyLabel");
@@ -47,10 +49,13 @@ const inputErrorEl = document.getElementById("inputError");
 const applyBtn = document.getElementById("applyBtn");
 const statusEl = document.getElementById("status");
 
+const themeMq = window.matchMedia("(prefers-color-scheme: light)");
+
 let currentTab = null;
 let currentUuid = null;
 let currentFormatId = "dashed";
 let customRegexSource = "";
+let theme = "system";
 
 function getFormat() {
   if (currentFormatId === "custom") {
@@ -130,6 +135,19 @@ function replaceUuid(url, newUuid) {
   return url.replace(format.global, format.format(newUuid));
 }
 
+// ---------- 主题 ----------
+
+function effectiveTheme() {
+  if (theme === "system") {
+    return themeMq.matches ? "light" : "dark";
+  }
+  return theme;
+}
+
+function applyTheme() {
+  document.documentElement.dataset.theme = effectiveTheme();
+}
+
 function setStatus(message, type = "") {
   statusEl.textContent = message;
   statusEl.className = `status${type ? ` ${type}` : ""}`;
@@ -196,6 +214,7 @@ function applyFormatToUi() {
 function renderSettingsUi() {
   formatSelect.value = currentFormatId;
   regexInput.value = customRegexSource;
+  themeSelect.value = theme;
   updateRegexState();
 }
 
@@ -219,17 +238,27 @@ async function saveFabVisible(visible) {
   await chrome.storage.sync.set({ [FAB_VISIBLE_KEY]: visible });
 }
 
+async function saveTheme(value) {
+  theme = value === "light" || value === "dark" ? value : "system";
+  renderSettingsUi();
+  applyTheme();
+  await chrome.storage.sync.set({ [THEME_KEY]: theme });
+}
+
 async function loadSettings() {
   const data = await chrome.storage.sync.get({
     [FORMAT_KEY]: "dashed",
     [UUID_REGEX_KEY]: "",
     [FAB_VISIBLE_KEY]: true,
+    [THEME_KEY]: "system",
   });
   const fmt = data[FORMAT_KEY];
   currentFormatId = fmt === "custom" || FORMATS[fmt] ? fmt : "dashed";
   customRegexSource = data[UUID_REGEX_KEY] || "";
   fabVisibleToggle.checked = data[FAB_VISIBLE_KEY] !== false;
+  theme = data[THEME_KEY] === "light" || data[THEME_KEY] === "dark" ? data[THEME_KEY] : "system";
   renderSettingsUi();
+  applyTheme();
 }
 
 async function loadCurrentTab() {
@@ -342,6 +371,18 @@ fabVisibleToggle.addEventListener("change", async () => {
   await saveFabVisible(fabVisibleToggle.checked);
   setStatus(fabVisibleToggle.checked ? "已开启悬浮按钮" : "已隐藏悬浮按钮", "success");
   setTimeout(() => setStatus(""), 1500);
+});
+
+themeSelect.addEventListener("change", async () => {
+  await saveTheme(themeSelect.value);
+  setStatus(themeSelect.value === "light" ? "已切换为白色主题" : themeSelect.value === "dark" ? "已切换为黑色主题" : "已切换为跟随系统", "success");
+  setTimeout(() => setStatus(""), 1500);
+});
+
+themeMq.addEventListener("change", () => {
+  if (theme === "system") {
+    applyTheme();
+  }
 });
 
 copyBtn.addEventListener("click", copyUuid);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         URL UUID 工具（油猴脚本）
 // @namespace    https://github.com/huandc/url-uuid-extension
-// @version      1.0.0
+// @version      1.1.0
 // @description  从当前页面 URL 中提取 UUID：悬浮按钮一键复制（可拖动、位置记忆），支持格式切换与替换后刷新
 // @author       huandC
 // @match        http://*/*
@@ -21,7 +21,9 @@
   const FORMAT_KEY = "uuidFormat";
   const UUID_REGEX_KEY = "uuidRegex";
   const FAB_POSITION_KEY = "fabPosition";
+  const THEME_KEY = "theme";
   const DRAG_THRESHOLD = 5;
+  const themeMq = window.matchMedia("(prefers-color-scheme: light)");
 
   const FORMATS = {
     dashed: {
@@ -77,6 +79,7 @@
   let currentUuid = null;
   let currentFormatId = "dashed";
   let customRegexSource = "";
+  let theme = "system";
   let fabPosition = null;
   let resetTimer = null;
   let lastUrl = location.href;
@@ -162,12 +165,28 @@
     return url.replace(format.global, format.format(newUuid));
   }
 
+  // ---------- 主题 ----------
+
+  function effectiveTheme() {
+    if (theme === "system") {
+      return themeMq.matches ? "light" : "dark";
+    }
+    return theme;
+  }
+
+  function applyTheme() {
+    const eff = effectiveTheme();
+    document.documentElement.classList.toggle("us-theme-light", eff === "light");
+    document.documentElement.classList.toggle("us-theme-dark", eff === "dark");
+  }
+
   // ---------- 存储 / 位置 ----------
 
   function loadSettings() {
     const format = GM_getValue(FORMAT_KEY, "dashed");
     currentFormatId = format === "custom" || FORMATS[format] ? format : "dashed";
     customRegexSource = GM_getValue(UUID_REGEX_KEY, "") || "";
+    theme = GM_getValue(THEME_KEY, "system") === "light" || GM_getValue(THEME_KEY, "system") === "dark" ? GM_getValue(THEME_KEY, "system") : "system";
     fabPosition = normalizePosition(GM_getValue(FAB_POSITION_KEY, null));
   }
 
@@ -465,6 +484,7 @@
       return;
     }
     panelEls.select.value = currentFormatId;
+    panelEls.theme.value = theme;
     const format = getFormat();
     panelEls.input.placeholder = currentUuid || format.placeholder;
 
@@ -550,6 +570,15 @@
           <p class="uuid-panel-regex-error hidden"></p>
         </div>
 
+        <div class="uuid-panel-theme-row">
+          <label for="uuid-panel-theme">界面主题</label>
+          <select id="uuid-panel-theme" class="uuid-panel-select">
+            <option value="system">跟随系统</option>
+            <option value="light">白色</option>
+            <option value="dark">黑色</option>
+          </select>
+        </div>
+
         <label>当前 UUID</label>
         <div class="uuid-panel-current">
           <code class="uuid-panel-code" title="">—</code>
@@ -569,6 +598,7 @@
 
     panelEls = {
       select: panel.querySelector(".uuid-panel-select"),
+      theme: panel.querySelector("#uuid-panel-theme"),
       regexRow: panel.querySelector(".uuid-panel-regex-row"),
       regex: panel.querySelector(".uuid-panel-regex"),
       regexError: panel.querySelector(".uuid-panel-regex-error"),
@@ -605,6 +635,18 @@
       }
       renderPanel();
       syncFab();
+    });
+    panelEls.theme.addEventListener("change", () => {
+      theme =
+        panelEls.theme.value === "light" || panelEls.theme.value === "dark"
+          ? panelEls.theme.value
+          : "system";
+      try {
+        GM_setValue(THEME_KEY, theme);
+      } catch (e) {
+        // ignore
+      }
+      applyTheme();
     });
     panelEls.copy.addEventListener("click", async () => {
       if (!currentUuid) {
@@ -654,6 +696,12 @@
       }
       fabPosition = clampPosition(fabPosition.left, fabPosition.top);
       applyFabPosition();
+    });
+
+    themeMq.addEventListener("change", () => {
+      if (theme === "system") {
+        applyTheme();
+      }
     });
   }
 
@@ -913,11 +961,65 @@
     #uuid-userscript-panel .uuid-panel-regex-error.hidden {
       display: none;
     }
+
+    /* ---- 浅色（白色）主题 ---- */
+    html.us-theme-light #uuid-userscript-panel {
+      background: #ffffff;
+      border-color: rgba(0, 0, 0, 0.12);
+      color: #1f2328;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    }
+    html.us-theme-light #uuid-userscript-panel .uuid-panel-head {
+      border-bottom-color: rgba(0, 0, 0, 0.12);
+    }
+    html.us-theme-light #uuid-userscript-panel label,
+    html.us-theme-light #uuid-userscript-panel .uuid-panel-status,
+    html.us-theme-light #uuid-userscript-panel .uuid-panel-close {
+      color: #656d76;
+    }
+    html.us-theme-light #uuid-userscript-panel .uuid-panel-close:hover {
+      background: rgba(0, 0, 0, 0.08);
+      color: #1f2328;
+    }
+    html.us-theme-light #uuid-userscript-panel select,
+    html.us-theme-light #uuid-userscript-panel input,
+    html.us-theme-light #uuid-userscript-panel .uuid-panel-code {
+      background: #f6f8fa;
+      border-color: rgba(0, 0, 0, 0.12);
+      color: #1f2328;
+    }
+    html.us-theme-light #uuid-userscript-panel input::placeholder {
+      color: #9ca3af;
+    }
+    html.us-theme-light #uuid-userscript-panel .uuid-panel-code {
+      color: #4f46e5;
+    }
+    html.us-theme-light #uuid-userscript-panel .uuid-panel-copy {
+      background: #eaeef2;
+      border-color: rgba(0, 0, 0, 0.12);
+      color: #1f2328;
+    }
+    html.us-theme-light #uuid-userscript-panel .uuid-panel-copy:hover {
+      background: #e2e8f0;
+    }
+    html.us-theme-light #uuid-userscript-panel .uuid-panel-status.ok {
+      color: #16a34a;
+    }
+    html.us-theme-light #uuid-userscript-panel .uuid-panel-status.err,
+    html.us-theme-light #uuid-userscript-panel .uuid-panel-error,
+    html.us-theme-light #uuid-userscript-panel .uuid-panel-regex-error {
+      color: #dc2626;
+    }
+    html.us-theme-light #uuid-userscript-panel input.invalid,
+    html.us-theme-light #uuid-userscript-panel .uuid-panel-regex.invalid {
+      border-color: #dc2626;
+    }
   `);
 
   // ---------- 启动 ----------
 
   loadSettings();
+  applyTheme();
   buildPanel();
   syncFab();
   watchUrlChanges();
