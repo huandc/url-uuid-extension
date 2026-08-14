@@ -19,6 +19,7 @@
   "use strict";
 
   const FORMAT_KEY = "uuidFormat";
+  const UUID_REGEX_KEY = "uuidRegex";
   const FAB_POSITION_KEY = "fabPosition";
   const DRAG_THRESHOLD = 5;
 
@@ -75,6 +76,7 @@
   let panelEls = null;
   let currentUuid = null;
   let currentFormatId = "dashed";
+  let customRegexSource = "";
   let fabPosition = null;
   let resetTimer = null;
   let lastUrl = location.href;
@@ -83,6 +85,9 @@
   // ---------- UUID 工具 ----------
 
   function getFormat() {
+    if (currentFormatId === "custom") {
+      return buildCustomFormat();
+    }
     return FORMATS[currentFormatId] || FORMATS.dashed;
   }
 
@@ -98,14 +103,59 @@
     return `${compact.slice(0, 8)}-${compact.slice(8, 12)}-${compact.slice(12, 16)}-${compact.slice(16, 20)}-${compact.slice(20)}`;
   }
 
+  function parseRegexSource(source) {
+    const s = (source || "").trim();
+    // 兼容 /pattern/ 写法
+    if (s.length > 2 && s.startsWith("/") && s.endsWith("/")) {
+      return s.slice(1, -1);
+    }
+    return s;
+  }
+
+  function compileCustomPattern() {
+    const source = parseRegexSource(customRegexSource);
+    if (!source) {
+      return null;
+    }
+    try {
+      return new RegExp(source, "i");
+    } catch {
+      return null;
+    }
+  }
+
+  function buildCustomFormat() {
+    const pattern = compileCustomPattern();
+    const hasInput = customRegexSource.trim().length > 0;
+    return {
+      id: "custom",
+      pattern,
+      global: pattern ? new RegExp(pattern.source, "gi") : null,
+      placeholder: "匹配自定义正则的任意文本",
+      errorHint: hasInput ? "输入内容未匹配自定义正则" : "请输入或修正正则表达式",
+      format(value) {
+        return value.trim();
+      },
+      isValid(value) {
+        return Boolean(pattern) && pattern.test(value.trim());
+      },
+    };
+  }
+
   function extractUuid(url) {
     const format = getFormat();
+    if (!format.pattern) {
+      return null;
+    }
     const match = url.match(format.pattern);
     return match ? format.format(match[0]) : null;
   }
 
   function replaceUuid(url, newUuid) {
     const format = getFormat();
+    if (!format.pattern || !format.global) {
+      return null;
+    }
     if (!url.match(format.pattern)) {
       return null;
     }
@@ -116,7 +166,8 @@
 
   function loadSettings() {
     const format = GM_getValue(FORMAT_KEY, "dashed");
-    currentFormatId = FORMATS[format] ? format : "dashed";
+    currentFormatId = format === "custom" || FORMATS[format] ? format : "dashed";
+    customRegexSource = GM_getValue(UUID_REGEX_KEY, "") || "";
     fabPosition = normalizePosition(GM_getValue(FAB_POSITION_KEY, null));
   }
 
@@ -385,9 +436,20 @@
     const raw = panelEls.input.value.trim();
     const valid = raw.length === 0 || format.isValid(raw);
 
+    let errorText = "";
+    if (raw.length > 0 && !valid) {
+      if (currentFormatId === "custom" && !format.pattern) {
+        errorText = customRegexSource.trim()
+          ? "正则表达式无效"
+          : "请输入正则表达式";
+      } else {
+        errorText = format.errorHint;
+      }
+    }
+
     panelEls.input.classList.toggle("invalid", raw.length > 0 && !valid);
     panelEls.error.classList.toggle("hidden", raw.length === 0 || valid);
-    panelEls.error.textContent = raw.length > 0 && !valid ? format.errorHint : "";
+    panelEls.error.textContent = errorText;
     panelEls.apply.disabled = !currentUuid || !valid || raw.length === 0;
 
     if (raw && valid) {
@@ -405,6 +467,26 @@
     panelEls.select.value = currentFormatId;
     const format = getFormat();
     panelEls.input.placeholder = currentUuid || format.placeholder;
+
+    // 自定义正则：显示/隐藏正则输入行并校验
+    const showRegex = currentFormatId === "custom";
+    panelEls.regexRow.classList.toggle("hidden", !showRegex);
+    if (panelEls.regex.value !== customRegexSource) {
+      panelEls.regex.value = customRegexSource;
+    }
+    const hasRegex = customRegexSource.trim().length > 0;
+    const regexValid = !hasRegex || Boolean(compileCustomPattern());
+    panelEls.regex.classList.toggle(
+      "invalid",
+      showRegex && hasRegex && !regexValid
+    );
+    panelEls.regexError.classList.toggle(
+      "hidden",
+      !showRegex || !hasRegex || regexValid
+    );
+    panelEls.regexError.textContent =
+      showRegex && hasRegex && !regexValid ? "正则表达式无效" : "";
+
     if (currentUuid) {
       panelEls.code.textContent = currentUuid;
       panelEls.code.title = currentUuid;
@@ -458,7 +540,15 @@
         <select id="uuid-panel-select" class="uuid-panel-select">
           <option value="dashed">UUID（带 -）</option>
           <option value="compact">UUID（不带 -）</option>
+          <option value="custom">自定义格式（正则）</option>
         </select>
+        <div class="uuid-panel-regex-row hidden">
+          <label for="uuid-panel-regex">正则表达式</label>
+          <input id="uuid-panel-regex" class="uuid-panel-regex" type="text"
+            placeholder="例如：[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+            spellcheck="false" autocomplete="off" />
+          <p class="uuid-panel-regex-error hidden"></p>
+        </div>
 
         <label>当前 UUID</label>
         <div class="uuid-panel-current">
@@ -479,6 +569,9 @@
 
     panelEls = {
       select: panel.querySelector(".uuid-panel-select"),
+      regexRow: panel.querySelector(".uuid-panel-regex-row"),
+      regex: panel.querySelector(".uuid-panel-regex"),
+      regexError: panel.querySelector(".uuid-panel-regex-error"),
       code: panel.querySelector(".uuid-panel-code"),
       copy: panel.querySelector(".uuid-panel-copy"),
       input: panel.querySelector(".uuid-panel-input"),
@@ -490,9 +583,23 @@
 
     panelEls.close.addEventListener("click", () => panel.classList.add("hidden"));
     panelEls.select.addEventListener("change", () => {
-      currentFormatId = FORMATS[panelEls.select.value] ? panelEls.select.value : "dashed";
+      const next = panelEls.select.value;
+      currentFormatId = next === "custom" || FORMATS[next] ? next : "dashed";
       try {
         GM_setValue(FORMAT_KEY, currentFormatId);
+      } catch (e) {
+        // ignore
+      }
+      renderPanel();
+      syncFab();
+      if (currentFormatId === "custom") {
+        panelEls.regex.focus();
+      }
+    });
+    panelEls.regex.addEventListener("input", () => {
+      customRegexSource = panelEls.regex.value;
+      try {
+        GM_setValue(UUID_REGEX_KEY, customRegexSource);
       } catch (e) {
         // ignore
       }
@@ -781,6 +888,30 @@
     }
     #uuid-userscript-panel .uuid-panel-status.err {
       color: #f87171;
+    }
+    #uuid-userscript-panel .uuid-panel-regex-row {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: -2px;
+    }
+    #uuid-userscript-panel .uuid-panel-regex-row.hidden {
+      display: none;
+    }
+    #uuid-userscript-panel .uuid-panel-regex {
+      font-family: "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+    }
+    #uuid-userscript-panel .uuid-panel-regex.invalid {
+      border-color: #f87171;
+      box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.2);
+    }
+    #uuid-userscript-panel .uuid-panel-regex-error {
+      font-size: 11px;
+      color: #f87171;
+      margin: -2px 0 0;
+    }
+    #uuid-userscript-panel .uuid-panel-regex-error.hidden {
+      display: none;
     }
   `);
 

@@ -26,7 +26,20 @@
       <select id="formatSelect" class="select">
         <option value="dashed">UUID（带 -）</option>
         <option value="compact">UUID（不带 -）</option>
+        <option value="custom">自定义格式（正则）</option>
       </select>
+      <div id="regexRow" class="regex-row hidden">
+        <label class="label" for="regexInput">正则表达式</label>
+        <input
+          id="regexInput"
+          class="input"
+          type="text"
+          placeholder="例如：[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+          spellcheck="false"
+          autocomplete="off"
+        />
+        <p id="regexError" class="error hidden"></p>
+      </div>
       <div class="switch-row">
         <div>
           <div class="switch-title">显示悬浮按钮</div>

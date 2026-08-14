@@ -1,4 +1,5 @@
 const FORMAT_KEY = "uuidFormat";
+const UUID_REGEX_KEY = "uuidRegex";
 const FAB_VISIBLE_KEY = "fabVisible";
 
 const FORMATS = {
@@ -33,6 +34,9 @@ const FORMATS = {
 };
 
 const formatSelect = document.getElementById("formatSelect");
+const regexRow = document.getElementById("regexRow");
+const regexInput = document.getElementById("regexInput");
+const regexError = document.getElementById("regexError");
 const fabVisibleToggle = document.getElementById("fabVisibleToggle");
 const currentUuidEl = document.getElementById("currentUuid");
 const copyBtn = document.getElementById("copyBtn");
@@ -46,8 +50,12 @@ const statusEl = document.getElementById("status");
 let currentTab = null;
 let currentUuid = null;
 let currentFormatId = "dashed";
+let customRegexSource = "";
 
 function getFormat() {
+  if (currentFormatId === "custom") {
+    return buildCustomFormat();
+  }
   return FORMATS[currentFormatId] || FORMATS.dashed;
 }
 
@@ -63,14 +71,59 @@ function toDashedUuid(value) {
   return `${compact.slice(0, 8)}-${compact.slice(8, 12)}-${compact.slice(12, 16)}-${compact.slice(16, 20)}-${compact.slice(20)}`;
 }
 
+function parseRegexSource(source) {
+  const s = (source || "").trim();
+  // 兼容 /pattern/ 写法
+  if (s.length > 2 && s.startsWith("/") && s.endsWith("/")) {
+    return s.slice(1, -1);
+  }
+  return s;
+}
+
+function compileCustomPattern() {
+  const source = parseRegexSource(customRegexSource);
+  if (!source) {
+    return null;
+  }
+  try {
+    return new RegExp(source, "i");
+  } catch {
+    return null;
+  }
+}
+
+function buildCustomFormat() {
+  const pattern = compileCustomPattern();
+  const hasInput = customRegexSource.trim().length > 0;
+  return {
+    id: "custom",
+    pattern,
+    global: pattern ? new RegExp(pattern.source, "gi") : null,
+    placeholder: "匹配自定义正则的任意文本",
+    errorHint: hasInput ? "输入内容未匹配自定义正则" : "请输入或修正正则表达式",
+    format(value) {
+      return value.trim();
+    },
+    isValid(value) {
+      return Boolean(pattern) && pattern.test(value.trim());
+    },
+  };
+}
+
 function extractUuid(url) {
   const format = getFormat();
+  if (!format.pattern) {
+    return null;
+  }
   const match = url.match(format.pattern);
   return match ? format.format(match[0]) : null;
 }
 
 function replaceUuid(url, newUuid) {
   const format = getFormat();
+  if (!format.pattern || !format.global) {
+    return null;
+  }
   if (!url.match(format.pattern)) {
     return null;
   }
@@ -97,11 +150,33 @@ function updateInputState() {
   const hasCurrentUuid = Boolean(currentUuid);
   const valid = raw.length === 0 || format.isValid(raw);
 
+  let errorText = "";
+  if (raw.length > 0 && !valid) {
+    if (currentFormatId === "custom" && !format.pattern) {
+      errorText = customRegexSource.trim()
+        ? "正则表达式无效"
+        : "请输入正则表达式";
+    } else {
+      errorText = format.errorHint;
+    }
+  }
+
   uuidInput.classList.toggle("invalid", raw.length > 0 && !valid);
   inputErrorEl.classList.toggle("hidden", raw.length === 0 || valid);
-  inputErrorEl.textContent = raw.length > 0 && !valid ? format.errorHint : "";
+  inputErrorEl.textContent = errorText;
 
   applyBtn.disabled = !hasCurrentUuid || !valid || raw.length === 0;
+}
+
+function updateRegexState() {
+  const show = currentFormatId === "custom";
+  regexRow.classList.toggle("hidden", !show);
+  const source = customRegexSource.trim();
+  const valid = source.length === 0 || Boolean(compileCustomPattern());
+  regexInput.classList.toggle("invalid", show && source.length > 0 && !valid);
+  regexError.classList.toggle("hidden", !show || source.length === 0 || valid);
+  regexError.textContent =
+    show && source.length > 0 && !valid ? "正则表达式无效" : "";
 }
 
 function applyFormatToUi() {
@@ -118,10 +193,25 @@ function applyFormatToUi() {
   updateInputState();
 }
 
-async function saveFormat(formatId) {
-  currentFormatId = FORMATS[formatId] ? formatId : "dashed";
+function renderSettingsUi() {
   formatSelect.value = currentFormatId;
+  regexInput.value = customRegexSource;
+  updateRegexState();
+}
+
+async function saveFormat(formatId) {
+  if (formatId !== "custom" && !FORMATS[formatId]) {
+    formatId = "dashed";
+  }
+  currentFormatId = formatId;
+  renderSettingsUi();
   await chrome.storage.sync.set({ [FORMAT_KEY]: currentFormatId });
+}
+
+async function saveRegex(source) {
+  customRegexSource = source;
+  renderSettingsUi();
+  await chrome.storage.sync.set({ [UUID_REGEX_KEY]: customRegexSource });
 }
 
 async function saveFabVisible(visible) {
@@ -132,11 +222,14 @@ async function saveFabVisible(visible) {
 async function loadSettings() {
   const data = await chrome.storage.sync.get({
     [FORMAT_KEY]: "dashed",
+    [UUID_REGEX_KEY]: "",
     [FAB_VISIBLE_KEY]: true,
   });
-  currentFormatId = FORMATS[data[FORMAT_KEY]] ? data[FORMAT_KEY] : "dashed";
-  formatSelect.value = currentFormatId;
+  const fmt = data[FORMAT_KEY];
+  currentFormatId = fmt === "custom" || FORMATS[fmt] ? fmt : "dashed";
+  customRegexSource = data[UUID_REGEX_KEY] || "";
   fabVisibleToggle.checked = data[FAB_VISIBLE_KEY] !== false;
+  renderSettingsUi();
 }
 
 async function loadCurrentTab() {
@@ -154,23 +247,28 @@ async function loadCurrentTab() {
     return;
   }
 
-  currentUuid = extractUuid(tab.url);
+  refreshFromUrl();
+  urlHintEl.textContent = truncateUrl(tab.url);
+}
+
+function refreshFromUrl() {
+  if (!currentTab?.url) {
+    return;
+  }
+  currentUuid = extractUuid(currentTab.url);
 
   if (currentUuid) {
     currentUuidEl.textContent = currentUuid;
     currentUuidEl.classList.remove("empty");
     currentUuidEl.title = currentUuid;
     copyBtn.disabled = false;
-    uuidInput.placeholder = currentUuid;
   } else {
     currentUuidEl.textContent = "未找到 UUID";
     currentUuidEl.classList.add("empty");
-    urlHintEl.textContent = `当前 URL 中不包含所选格式的 UUID`;
+    currentUuidEl.title = "";
     copyBtn.disabled = true;
-    applyBtn.disabled = true;
   }
 
-  urlHintEl.textContent = truncateUrl(tab.url);
   applyFormatToUi();
 }
 
@@ -224,6 +322,20 @@ async function applyUuid() {
 formatSelect.addEventListener("change", async () => {
   await saveFormat(formatSelect.value);
   await loadCurrentTab();
+  if (currentFormatId === "custom") {
+    regexInput.focus();
+  }
+});
+
+regexInput.addEventListener("input", async () => {
+  await saveRegex(regexInput.value);
+  refreshFromUrl();
+});
+
+regexInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !applyBtn.disabled) {
+    applyUuid();
+  }
 });
 
 fabVisibleToggle.addEventListener("change", async () => {

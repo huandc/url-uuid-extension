@@ -1,4 +1,5 @@
 const FORMAT_KEY = "uuidFormat";
+const UUID_REGEX_KEY = "uuidRegex";
 const FAB_VISIBLE_KEY = "fabVisible";
 const FAB_POSITION_KEY = "fabPosition";
 const DRAG_THRESHOLD = 5;
@@ -31,6 +32,7 @@ const CHECK_ICON = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
 let fab = null;
 let currentUuid = null;
 let currentFormatId = "dashed";
+let customRegexSource = "";
 let fabVisible = true;
 let fabPosition = null;
 let resetTimer = null;
@@ -38,6 +40,9 @@ let lastUrl = location.href;
 let dragState = null;
 
 function getFormat() {
+  if (currentFormatId === "custom") {
+    return buildCustomFormat();
+  }
   return FORMATS[currentFormatId] || FORMATS.dashed;
 }
 
@@ -53,8 +58,44 @@ function toDashedUuid(value) {
   return `${compact.slice(0, 8)}-${compact.slice(8, 12)}-${compact.slice(12, 16)}-${compact.slice(16, 20)}-${compact.slice(20)}`;
 }
 
+function parseRegexSource(source) {
+  const s = (source || "").trim();
+  // 兼容 /pattern/ 写法
+  if (s.length > 2 && s.startsWith("/") && s.endsWith("/")) {
+    return s.slice(1, -1);
+  }
+  return s;
+}
+
+function compileCustomPattern() {
+  const source = parseRegexSource(customRegexSource);
+  if (!source) {
+    return null;
+  }
+  try {
+    return new RegExp(source, "i");
+  } catch {
+    return null;
+  }
+}
+
+function buildCustomFormat() {
+  const pattern = compileCustomPattern();
+  return {
+    id: "custom",
+    pattern,
+    global: pattern ? new RegExp(pattern.source, "gi") : null,
+    format(value) {
+      return value.trim();
+    },
+  };
+}
+
 function extractUuid(url) {
   const format = getFormat();
+  if (!format.pattern) {
+    return null;
+  }
   const match = url.match(format.pattern);
   return match ? format.format(match[0]) : null;
 }
@@ -63,14 +104,18 @@ async function loadSettings() {
   try {
     const data = await chrome.storage.sync.get({
       [FORMAT_KEY]: "dashed",
+      [UUID_REGEX_KEY]: "",
       [FAB_VISIBLE_KEY]: true,
       [FAB_POSITION_KEY]: null,
     });
-    currentFormatId = FORMATS[data[FORMAT_KEY]] ? data[FORMAT_KEY] : "dashed";
+    const format = data[FORMAT_KEY];
+    currentFormatId = format === "custom" || FORMATS[format] ? format : "dashed";
+    customRegexSource = data[UUID_REGEX_KEY] || "";
     fabVisible = data[FAB_VISIBLE_KEY] !== false;
     fabPosition = normalizePosition(data[FAB_POSITION_KEY]);
   } catch {
     currentFormatId = "dashed";
+    customRegexSource = "";
     fabVisible = true;
     fabPosition = null;
   }
@@ -346,7 +391,12 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
   if (changes[FORMAT_KEY]) {
     const next = changes[FORMAT_KEY].newValue;
-    currentFormatId = FORMATS[next] ? next : "dashed";
+    currentFormatId = next === "custom" || FORMATS[next] ? next : "dashed";
+    shouldSync = true;
+  }
+
+  if (changes[UUID_REGEX_KEY]) {
+    customRegexSource = changes[UUID_REGEX_KEY].newValue || "";
     shouldSync = true;
   }
 

@@ -325,3 +325,17 @@ body {
 .status.error {
   color: var(--error);
 }
+
+.regex-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.regex-row.hidden {
+  display: none;
+}
+
+.regex-row .input {
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+}
